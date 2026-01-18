@@ -3,7 +3,7 @@
 local triggered = false
 local lastTriggerTime = 0
 local COOLDOWN = 1.5
-local TRIGGER_DELAY = 0.15
+local TRIGGER_DELAY = 1.7
 local CURSOR_LENIENCY = 0.5
 
 local player = game.Players.LocalPlayer
@@ -138,3 +138,4 @@ while true do
         end
     end
 end
+
