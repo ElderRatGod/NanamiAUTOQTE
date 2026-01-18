@@ -1,0 +1,140 @@
+-- Memory-based QTE Auto Script
+
+local triggered = false
+local lastTriggerTime = 0
+local COOLDOWN = 1.5
+local TRIGGER_DELAY = 0.15
+local CURSOR_LENIENCY = 0.5
+
+local player = game.Players.LocalPlayer
+
+local function findActiveQTE()
+    local characters = game.Workspace:FindFirstChild("Characters")
+    if not characters then return nil, nil, nil end
+    
+    local localCharacter = player.Character
+    
+    for _, character in pairs(characters:GetChildren()) do
+        if character:IsA("Model") then
+            local info = character:FindFirstChild("Info")
+            if info then
+                local ratioInfo = info:FindFirstChild("Ratio")
+                if ratioInfo then
+                    local owner = ratioInfo:FindFirstChild("Owner")
+                    
+                    if owner and owner.Value and owner.Value.Name == player.Name then
+                        local hrp = character:FindFirstChild("HumanoidRootPart")
+                        if hrp then
+                            local ratioUI = hrp:FindFirstChild("Ratio")
+                            if ratioUI then
+                                local bar = ratioUI:FindFirstChild("Bar")
+                                if bar then
+                                    local cursor = bar:FindFirstChild("Cursor")
+                                    local hit1 = bar:FindFirstChild("Hit")
+                                    local hit2 = bar:FindFirstChild("Hit2")
+                                    
+                                    if cursor and (hit1 or hit2) then
+                                        return cursor, hit1, hit2
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    return nil, nil, nil
+end
+
+local function getDistanceAndSize(cursor, hit)
+    if not cursor or not hit then return 999, 0 end
+    
+    local cursorCenter = cursor.AbsolutePosition.X + (cursor.AbsoluteSize.X / 2)
+    local hitCenter = hit.AbsolutePosition.X + (hit.AbsoluteSize.X / 2)
+    local cursorRadius = cursor.AbsoluteSize.X / 2
+    
+    return math.abs(cursorCenter - hitCenter), cursorRadius
+end
+
+local hit1Data = {lastDist = 999, approaching = 0, startTime = nil}
+local hit2Data = {lastDist = 999, approaching = 0, startTime = nil}
+
+while true do
+    task.wait(0.005)
+    
+    if triggered and os.clock() - lastTriggerTime > COOLDOWN then
+        triggered = false
+        hit1Data = {lastDist = 999, approaching = 0, startTime = nil}
+        hit2Data = {lastDist = 999, approaching = 0, startTime = nil}
+    end
+    
+    if not triggered then
+        local cursor, hit1, hit2 = findActiveQTE()
+        
+        if cursor and (hit1 or hit2) then
+            local function processHit(hit, data)
+                if not hit then return false end
+                
+                local dist, cursorRadius = getDistanceAndSize(cursor, hit)
+                if dist >= 999 then return false end
+                
+                if not data.startTime then
+                    data.startTime = os.clock()
+                end
+                
+                if os.clock() - data.startTime < TRIGGER_DELAY then
+                    data.lastDist = dist
+                    return false
+                end
+                
+                local velocity = math.abs(dist - data.lastDist) / 0.005
+                local isApproaching = dist < data.lastDist - 0.05
+                
+                if isApproaching then
+                    data.approaching += 1
+                else
+                    data.approaching = 0
+                end
+                
+                local baseThreshold, minFrames
+                
+                if velocity > 18000 then
+                    baseThreshold, minFrames = 25, 1
+                elseif velocity > 12000 then
+                    baseThreshold, minFrames = 20, 2
+                elseif velocity > 8000 then
+                    baseThreshold, minFrames = 16, 2
+                elseif velocity > 4000 then
+                    baseThreshold, minFrames = 12, 2
+                elseif velocity > 2000 then
+                    baseThreshold, minFrames = 10, 2
+                elseif velocity > 1000 then
+                    baseThreshold, minFrames = 8, 3
+                else
+                    baseThreshold, minFrames = 6, 3
+                end
+                
+                local threshold = baseThreshold + (cursorRadius * CURSOR_LENIENCY)
+                
+                data.lastDist = dist
+                return data.approaching >= minFrames and dist <= threshold and isApproaching
+            end
+            
+            if processHit(hit1, hit1Data) or processHit(hit2, hit2Data) then
+                if keypress and keyrelease then
+                    keypress(0x52)
+                    task.wait(0.05)
+                    keyrelease(0x52)
+                end
+                
+                triggered = true
+                lastTriggerTime = os.clock()
+            end
+        else
+            hit1Data = {lastDist = 999, approaching = 0, startTime = nil}
+            hit2Data = {lastDist = 999, approaching = 0, startTime = nil}
+        end
+    end
+end
